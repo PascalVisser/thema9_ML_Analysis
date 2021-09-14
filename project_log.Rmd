@@ -1,0 +1,15 @@
+---
+title: "Project log"
+author: "Pascal Visser"
+date: "14-9-2021"
+output: pdf_document
+---
+
+## Log demands 
+
+- all steps of analysis
+- log in englisch and easy to read
+- data descriped in detail 
+- no data processing steps missing
+- clear order of analysis processing steps
+- every step has a: intro, result, conclusion 
