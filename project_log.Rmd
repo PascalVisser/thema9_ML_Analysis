@@ -2,10 +2,14 @@
 title: "Project log"
 author: "Pascal Visser"
 date: "14-9-2021"
-output: 
+output:
   pdf_document:
-    toc: true
-    toc_depth: 3
+    toc: yes
+    toc_depth: 2
+  html_document:
+    toc: yes
+    toc_depth: '2'
+    df_print: paged
 ---
 
 ```{r warning=F, message=F}
@@ -16,6 +20,10 @@ library(dplyr)
 library(tidyr)
 library(pander)
 library(gridExtra)
+library(ggrepel)
+library(forcats)
+library(scales)
+library(knitr)
 ```
 
 # 1. Intro
@@ -47,7 +55,7 @@ The goal of this research is to see if it is possible to predict the tumor stage
 - Metastasis  (M0 or M1)
 - ACCJ status (summary of above annotations)
 
-All these factor can indicate the cancerous state of the patient. In this case, tumor stage is the most important factor. Because the prediction of this tumor stage will be based of the expression level of the samples. 
+All these factors can indicate the cancerous state of the patient. In this case, tumor stage is the most important factor. Because the prediction of this tumor stage will be based of the expression level of the samples. 
 
 The tumor stage information runs from T1 till T4, with T1 as the least malicious. With the following classification:
 
@@ -66,12 +74,17 @@ The data will be loaded from the Data folder in the repository.
 # load data
 proteomes <- as.data.frame(read.csv(file = 'Data/cancer_proteomes.csv'))
 patient_data <- as.data.frame(read.csv(file = "Data/data_patients.csv"))
-head(proteomes[, 1:5])
+knitr::kable(head(proteomes[, 1:6]), caption = "Proteomes dataset")
 ```
 
 The proteomes file contain 86 columns: 3 columns with gene information, 80 columns of expression data with TCGA.ID (with 3 duplicates) and 3 columns of expression data of healthy persons.   
 
 Also the clinical patient data is loaded in. Containing the tumor stage annotation that will be used. 
+
+```{r}
+knitr::kable(head(patient_data[, 1:6]), caption = "Clinical patient dataset")
+```
+
 
 ## 2.2 Transform data
 
@@ -108,7 +121,7 @@ proteomes_new <- proteomes
 
 # Remove duplicates
 proteomes_new <- proteomes_new[!duplicated(proteomes_new$Complete.TCGA.ID), ]
-head(proteomes_new[, 1:5])
+knitr::kable(head(proteomes_new[, 1:6]), caption = "Transformed proteomes dataset")
 ```
 Now the proteomes file has the ID in the first column. Then the next 12.554 columns are the expression data of the corresponding protein.
 
@@ -125,8 +138,9 @@ proteomes_complete <- proteomes_complete[-c(2:6,8:30)]
 
 # Rename column
 colnames(proteomes_complete)[2] <- 'Tumor_Stage'
-head(proteomes_complete[, 1:5])
+knitr::kable(head(proteomes_complete[, 1:6]), caption = "Added tumor annotation")
 ```
+
 
 Now the Tumor stage annotation is added to the data frame.
 
@@ -136,8 +150,9 @@ For many functions R expects data to be in a long format, rather than a wide for
 
 ```{r}
 # wide to long format with reshape2 package
-pro_long <- melt(proteomes_complete, id.vars = c("Complete.TCGA.ID", "Tumor_Stage"), variable.name = "Protein_RefSeq")
-head(pro_long)
+pro_long <- melt(proteomes_complete, id.vars = c("Complete.TCGA.ID", "Tumor_Stage"), 
+variable.name = "Protein_RefSeq")
+knitr::kable(head(pro_long, 8), caption = "proteomes data in long format")
 ```
 
 Now the data is in a workable long format, that is better to be handled by R. This will complete the data formatting. 
@@ -147,22 +162,26 @@ Now the data is in a workable long format, that is better to be handled by R. Th
 
 For a good understanding of the data, is a EDA necessary. EDA stands for exploratory data analysis. In this part of the journal, the formatted data is visualised and explored. By neat and annotated tables and figures, the data will be much more clear and shows new insights. 
 
-{LIST EDA STEPS}
+- Summary
+- Missing data
+- Distribution 
+- Tumor stage distribution 
 
 
 ## 3.1 Summary
 
-First, let's look at a summary of all the expression values from the dataset.
+First, let's look at a summary of all the expression values from the dataset:
 
 ```{r}
 # Summary all
-pander(summary(pro_long$value), caption = 'Total')
+pander(summary(pro_long$value), caption = 'Table 6: Total summary')
 ```
+
 The median and mean of all the expression values are negative, which means that most proteins are synthesised less. There is a high maximum and a low minimum. These are probably outliers. Also there are 100622 NA's out of 966,581 expressions values, which equals to 10,41%. Next there will be a summary per Tumor stage to see if there are notable differences.
 
 ```{r}
 # apply a summary per Tumor stage
-pander(tapply(pro_long$value, pro_long$Tumor_Stage, summary))
+pander(tapply(pro_long$value, pro_long$Tumor_Stage, summary(title = 'q')))
 ```
 Same story here, negative means and medians, couple of outliers at the max. and min. No noticeable differences.   
 
@@ -173,14 +192,17 @@ With all big datasets, it is never 100% complete. Also in this dataset, multiple
 ```{r}
 #total na's in dataset
 tot.na <- sum(is.na(pro_long))
+cat("Total number of NA's in dataset: ", tot.na)
 
 # calculate na's per protein
 na_per_protein <- aggregate(value ~ Protein_RefSeq, data=pro_long, function(x) {sum(is.na(x))}, na.action = NULL)
 nas <- as.data.frame(table(na_per_protein$value[na_per_protein$value>=1]))
 
+
 # plot 
-ggplot(nas, aes(Var1, Freq, group = 1)) + geom_line() + geom_point() + labs(x = "Number of NA's", y = 'Frequency', title = "Frequency of NA's per count")
-cat("Total number of NA's in dataset: ", tot.na)
+ggplot(nas, aes(Var1, Freq, group = 1)) + geom_line() + geom_point() + 
+labs(x = "Number of NA's", y = 'Frequency of proteins', title = "Figure 1: Frequency of NA's per count") +
+scale_x_discrete(guide = guide_axis(check.overlap = TRUE))
 ```
 Out of the total 12553 protein in the dataset, 8017 proteins contain zero Na's, which means that 4536 protein have one or more NA's. In the graph is to see that low to medium counts of NA's are no uncommon.
 
@@ -193,12 +215,13 @@ The distribution shows the spread of the data. The distribution can be shown by 
 plot1 <- ggplot(pro_long, aes(x = value)) +
          geom_density(color = 'red', fill = 'lightblue') + 
          geom_vline(aes(xintercept=mean(value, na.rm=T)),color="red", linetype="dashed", size=1) +
-         labs(x = 'Expression value', y = 'Density', title = 'Expression value density')
+         geom_text(aes(x=-2, label="\nMean", y=0.2), colour="blue", angle=0, text=element_text(size=11)) +
+         labs(x = 'Expression value', y = 'Density', title = 'Figure 2: Expression value density')
 
 # plot density by tumor stage
 plot2 <- ggplot(pro_long, aes(x = value, group = Tumor_Stage, fill = Tumor_Stage)) + 
          geom_density(adjust=1.5, alpha = .4) +
-         labs(x = 'Expression value', y = 'Density', title = 'Expression density by tumor stage')
+         labs(x = 'Expression value', y = 'Density', title = 'Figure 3: Expression density by tumor stage')
 
 plot1
 plot2
@@ -207,13 +230,36 @@ plot2
 
 The above distribution graphs shows very little variation in the data. In the general expression value plot, the peak lay around the 0, with a little more distribution towards the negative. 
 
-In the tumor stage density, the 4 stage overlap in the plot. but the difference is so little, that the overlap barely can be seen. 
+In the tumor stage density, the 4 stage overlap in the plot. But the difference is so little, that the overlap barely can be seen. 
 
 ```{r warnings=F}
-ggplot(pro_long, aes(value, Tumor_Stage, na.rm = T)) + 
-geom_point() + labs(x = 'Expression value', y = 'Tumor Stage', title = 'Tumor stage distribution')
+ggplot(pro_long, aes(x = value, y = Tumor_Stage)) + 
+geom_point(na.rm = T) + labs(x = 'Expression value', y = 'Tumor Stage', title = 'Figure 4: Tumor stage distribution')
 ```
 
+Also, the plot above shows the distribution by tumor group as a scatterplot. Here the outliers can better be identified, but no real difference between the groups. 
 
-Also, above plot shows a couple of outlier, but no real difference between the groups. 
+## 3.4 Tumor stage distribution 
+
+Each of the 77 patient is categorised in a tumor group, based of the tumor size and malicious state. But how many patient are in each stage? and how is this divided?
+
+```{r}
+# count frequency of tumor groups
+stage_count <- proteomes_complete %>%
+            select(Tumor_Stage) %>%
+            group_by(Tumor_Stage) %>%
+            count()
+
+prtage <- paste(round(100*stage_count$n/sum(stage_count$n), 2), "%")
+
+# plot pie chart
+ggplot(stage_count, aes(x = '', y = n, fill = Tumor_Stage)) + geom_bar(stat = 'identity', width = 2) + coord_polar('y', start = 0) +
+theme_void() +  geom_text(aes(label = prtage), position = position_stack(vjust = 0.50), size = 3.5) + scale_fill_brewer(palette="Set1") + labs(title = 'Figure 5: Percentage of Tumor stages found in patients')
+```
+Tumor stage T2 is obvious the most common stage. 66% of the patients are in this stage. T1 and T3 share the about the same percentage. T4 is the rare group , with only 6,5% of the patients. Patients in stage T4 have a high mortality rate, so they die early. that's why the T4 percentage probably is so small. 
+
+For T1, the tumor is 20 millimetres or smaller in size. thus it is difficult to detect. By stage T2 the tumor is a must more detectable size. therefore that's why T2 is probably more common. 
+
+# 4.
+
 
