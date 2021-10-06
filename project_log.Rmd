@@ -19,7 +19,6 @@ library(reshape2)
 library(dplyr)
 library(tidyr)
 library(pander)
-library(gridExtra)
 library(ggrepel)
 library(forcats)
 library(scales)
@@ -174,14 +173,14 @@ First, let's look at a summary of all the expression values from the dataset:
 
 ```{r}
 # Summary all
-pander(summary(pro_long$value), caption = 'Table 6: Total summary')
+pander(summary(pro_long$value), caption = 'Total summary')
 ```
 
 The median and mean of all the expression values are negative, which means that most proteins are synthesised less. There is a high maximum and a low minimum. These are probably outliers. Also there are 100622 NA's out of 966,581 expressions values, which equals to 10,41%. Next there will be a summary per Tumor stage to see if there are notable differences.
 
 ```{r}
 # apply a summary per Tumor stage
-pander(tapply(pro_long$value, pro_long$Tumor_Stage, summary(title = 'q')))
+pander(tapply(pro_long$value, pro_long$Tumor_Stage, summary))
 ```
 Same story here, negative means and medians, couple of outliers at the max. and min. No noticeable differences.   
 
@@ -214,7 +213,7 @@ The distribution shows the spread of the data. The distribution can be shown by 
 # plot density expression value
 plot1 <- ggplot(pro_long, aes(x = value)) +
          geom_density(color = 'red', fill = 'lightblue') + 
-         geom_vline(aes(xintercept=mean(value, na.rm=T)),color="red", linetype="dashed", size=1) +
+         geom_vline(aes(xintercept=mean(value, na.rm=T)),color="red", linetype="dashed", size=0.5) +
          geom_text(aes(x=-2, label="\nMean", y=0.2), colour="blue", angle=0, text=element_text(size=11)) +
          labs(x = 'Expression value', y = 'Density', title = 'Figure 2: Expression value density')
 
@@ -233,8 +232,8 @@ The above distribution graphs shows very little variation in the data. In the ge
 In the tumor stage density, the 4 stage overlap in the plot. But the difference is so little, that the overlap barely can be seen. 
 
 ```{r warnings=F}
-ggplot(pro_long, aes(x = value, y = Tumor_Stage)) + 
-geom_point(na.rm = T) + labs(x = 'Expression value', y = 'Tumor Stage', title = 'Figure 4: Tumor stage distribution')
+# ggplot(pro_long, aes(x = value, y = Tumor_Stage)) +
+# geom_point(na.rm = T) + labs(x = 'Expression value', y = 'Tumor Stage', title = 'Figure 4: Tumor stage distribution')
 ```
 
 Also, the plot above shows the distribution by tumor group as a scatterplot. Here the outliers can better be identified, but no real difference between the groups. 
@@ -260,6 +259,112 @@ Tumor stage T2 is obvious the most common stage. 66% of the patients are in this
 
 For T1, the tumor is 20 millimetres or smaller in size. thus it is difficult to detect. By stage T2 the tumor is a must more detectable size. therefore that's why T2 is probably more common. 
 
-# 4.
 
+## 3.5 Outliers 
+
+The summary of the tumor stages (table 7) showed nothing but the total spread of the data in table form. With a boxplot the data outliers can be spotted easier. 
+
+```{r}
+ggplot(pro_long, aes(Tumor_Stage, value)) +
+geom_boxplot(fill='blue', alpha = 0.2, na.rm = T) +
+labs(x = 'Tumor Stage', y = 'Expression value',title = 'Figure 6: Boxplot summary per Tumor group')
+```
+
+The spread of the data per group is very wide. In above boxplot, the outliers are clearly visible. This amount of outliers is normal for a dataset like this. As shown in the tumor stage distribution (figure 2/3), the biggest part of the values lies around the means of the group. 
+
+# 4. EDA Result
+
+After the EDA, the results of the figures going to be discussed and concluded. In the EDA it was clear that there was not a lot of difference between the Tumor groups based on all the samples. Therefore it is not expected that the research question can be answered with a positive answer based of the EDA only. Further analyse and discussion is necessary for a better conclusion. 
+
+## 4.1 Boxplots per protein
+
+In the figures of the tumor stage distribution, all the proteins were used in the distribution per stage. This gives a overall view of the possible differences, but not per protein. For example a few random protein will be plotted per tumor group.
+
+
+```{r warning=F}
+p0 <- pro_long %>%
+  filter(Protein_RefSeq %in% c('NP_958782', 'NP_001138722', 'NP_001128504'))
+
+p0 %>%
+  ggplot(aes(x = Tumor_Stage, y = value, fill = Protein_RefSeq)) +
+  geom_boxplot(na.rm = T) + geom_jitter(width = 0.01, alpha = 0.3) +
+  labs(x = 'Tumor Stage', y = 'Expression value', title = 'Figure 7: Boxplot with random proteins') +
+  scale_fill_brewer(palette="Set1")
+```
+
+As result, with three random protein, three very different distributions. There is not a pattern to find between de groups. Only that they tend to go more towards the negative values, In this example. with three other protein the results can be very different. As demonstrated below.
+
+```{r warning=F}
+p1 <- pro_long %>%
+  filter(Protein_RefSeq %in% c('NP_056289', 'NP_000867', 'NP_057662'))
+
+p1 %>%
+  ggplot(aes(x = Tumor_Stage, y = value, fill = Protein_RefSeq)) +
+  geom_boxplot(na.rm = T) +
+  labs(x = 'Tumor Stage', y = 'Expression value', title = 'Figure 8: Boxplot with random proteins #2') +
+  scale_fill_brewer(palette="Set2")
+```
+Same here, very different distributions of values. But this time more centred around the mean. Yet there can not be a clear conclusion made based of these boxplot. For a good and accurate answer, there must be a boxplot per tumor group per protein be made and compared to each other. which is maybe not statistic responsible. And if there are protein with clear differences per tumor level, the biological relevance plays also a part.
+
+## 4.2 Overall result
+
+Overall is the data loaded, transformed and analysed. with mixed results. There was a expectation that the groups overall showed a difference, but they didn't, at least not on the total scale. By analysing per protein, there are more notable differences. but thy can be difficult and time consuming to find. 
+
+In the EDA is a good view made of the data. By different plots and tables, the data is better understandable. The total summary and summary per tumor group is shown. Total count of NA's and NA count per protein is plotted. The overall distribution and distribution per tumor group. And also the  tumor groups per patients is plotted. 
+
+With these analysis the data is explored and analysis, ready for a discussion. 
+
+
+# 5. EDA Discusssion and conclusion
+
+The overall quality of the data is good and the data is broad. But with the research question: 'Is it possible to predict a breast cancer stage, based of the expression data from 77 cancer proteomes?' It is doubtful that it can be answered with a simple 'yes'. Mainly through earlier named reasons. 
+
+On the positive side, the data is wide and of good quality. with clear classes and not corrupted, only a few NA's per 100 instances. Without the NA's it is not likely that the results would be different, because there is already much data. 
+
+The difficult part with this data (in combination with the research question) is the many protein. there is not a clear trend to be seen is the data, based of the overall analysis. As seen in the results section (4.1), with random proteins the results are more divergent. But based on the data, there is no way to tell which protein is more important that the other. The biological relevance of the proteins is not clear. 
+
+As solution for this problem, a literature study of common breast cancer protein could be very useful. By knowing the 100 - 200 most related protein. The research could be narrowed to these proteins. With a new EDA on these filtered data, maybe differences will come on top. 
+
+
+# 6. Machine learning
+
+The Goal in the machine learning is to predict a Tumor stage based of the protein expression data. By classifying tumor stage with expression values, predictions can be made in which category these values belong. This part covers the cleaning of the data, determine quality metrics and investigate performance of machine learning algorithms. 
+
+For the machine learning (ML) a program named Weka will be used. Weka is a collection of machine learning algorithms for data mining tasks. It contains tools for data preparation, classification, regression, clustering, association rules mining, and visualization. In this analysis Weka version 3.8.5 is used. 
+
+# 6.1 cleaning data
+
+Weka demand files to be a specific file type in order to be accepted. In this project, the data will be cast to a csv file type. To function properly, Weka wants the classifier at the last column for better processing. The transformed data will be written to a csv file. 
+
+```{r}
+# Relocate Tumor stage to the end
+tumTolast <- proteomes_complete %>%
+                relocate(Tumor_Stage, .after = last_col())
+
+# write to .csv
+write.csv(tumTolast, 'Data/proteome_ML_data.csv')
+```
+
+Now the data is properly formatted for Machine learning uses in Weka.  
+
+# 6.2 Determine quality metrics
+
+Beforehand it is useful to know what the quality metrics are for a success. So what quality metrics are important and how are they impact the desired result?  
+
+Example of different quality metrics:
+
+- accuracy 
+- speed
+- size of tree
+- TP rate
+- FP rate
+
+(Determine quality metrics relevant for your research)
+- (evaluating ML algorithm performance, accuracy is the default quality metric)
+
+{Describe and define criteria that are important for your research. Also describe how you are
+going to determine and evaluate these aspects.}
+
+
+# 6.3 ML algorithms 
 
