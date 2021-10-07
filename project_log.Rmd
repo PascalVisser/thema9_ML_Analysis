@@ -5,10 +5,10 @@ date: "14-9-2021"
 output:
   pdf_document:
     toc: yes
-    toc_depth: 2
+    toc_depth: 3
   html_document:
     toc: yes
-    toc_depth: '2'
+    toc_depth: '3'
     df_print: paged
 ---
 
@@ -332,14 +332,21 @@ The Goal in the machine learning is to predict a Tumor stage based of the protei
 
 For the machine learning (ML) a program named Weka will be used. Weka is a collection of machine learning algorithms for data mining tasks. It contains tools for data preparation, classification, regression, clustering, association rules mining, and visualization. In this analysis Weka version 3.8.5 is used. 
 
-# 6.1 cleaning data
+## 6.1 cleaning data
 
-Weka demand files to be a specific file type in order to be accepted. In this project, the data will be cast to a csv file type. To function properly, Weka wants the classifier at the last column for better processing. The transformed data will be written to a csv file. 
+Weka demand files to be a specific file type in order to be accepted. In this project, the data will be cast to a csv file type. To function properly, Weka wants the classifier at the last column for better processing. So the tumor stage will be set to the last column.
 
-```{r}
+Also the NA's will be converted to the mean of that column. Because otherwise Weka will label the columns with NA's as string. The transformed data will be written to a csv file. 
+
+```{r warning=F}
 # Relocate Tumor stage to the end
 tumTolast <- proteomes_complete %>%
                 relocate(Tumor_Stage, .after = last_col())
+
+#Remove NA's
+for(i in 1:ncol(tumTolast)){
+  tumTolast[is.na(tumTolast[,i]), i] <- mean(tumTolast[,i], na.rm = TRUE)
+  }
 
 # write to .csv
 write.csv(tumTolast, 'Data/proteome_ML_data.csv')
@@ -347,7 +354,7 @@ write.csv(tumTolast, 'Data/proteome_ML_data.csv')
 
 Now the data is properly formatted for Machine learning uses in Weka.  
 
-# 6.2 Determine quality metrics
+## 6.2 Determine quality metrics
 
 Beforehand it is useful to know what the quality metrics are for a success. So what quality metrics are important and how are they impact the desired result?  
 
@@ -356,15 +363,80 @@ Example of different quality metrics:
 - accuracy 
 - speed
 - size of tree
-- TP rate
-- FP rate
-
-(Determine quality metrics relevant for your research)
-- (evaluating ML algorithm performance, accuracy is the default quality metric)
-
-{Describe and define criteria that are important for your research. Also describe how you are
-going to determine and evaluate these aspects.}
+- Confusion matrix
 
 
-# 6.3 ML algorithms 
+Obviously a high accuracy is desired by all means. Then the question is, how accurate is good enough? As base, a accuracy of 95% is considered good. with deadly diseases like cancers, 80% is not good enough. Which means that one in five is classified in the wrong Tumor stage, which can have serious consequences. By 95% one in twenty is classified wrong. 
+
+Speed of the algorithm is important by big usage. Implementing the model in a local environment, 1 to 2 minutes is okay. As it would not calculate more than 10 times a day. But in a large application, an fast algorithm is a demand. 
+
+The size of a Decision tree is a important factor. With a large tree with many leave, overfitting could be possible. as the algorithm is to specific on the trainings set. A small, but accurate tree is desirable. 
+
+A confusion matrix, is a specific table that allows visualization of the performance of an algorithm. Each row of the matrix represents the instances in an actual class while each column represents the instances in a predicted class. This indicates also the rate of true positives, true negatives, false positives and false negatives. Identifying T2 as T4 can cause serious problems. The errors in the matrix will weight heavy on the model performance.
+
+In conclusion: accuracy, confusion matrix and size of tree will weight the heaviest in selecting a good algorithm. 
+
+
+## 6.3 ML algorithms 
+
+With a proper dataset and determined quality metrics,the .csv file is loaded into Weka. The first two rows with ID's are removed, the blank attribute and Complete.TGCA.ID. In the edit viewer, the Attributes are quickly visual scanned, to see if all the labels says numeric. 
+
+In The test options, cross-validation is set to 10 Folds. 
+
+TP = True positive
+FP = false positive
+
+Cancer stage distribution: 
+
+-T1 = 10 instances 
+-T2 = 51 instances
+-T3 = 11 instances
+-T4 = 5  instances
+
+Because of the dominance of T2, many algorithms will tend to choose T2. Especially ZeroR. 
+
+### 6.3.1 Baseline
+
+First ZeroR and OneR are used to measure baseline performance.
+ 
+```{r}
+read.csv('Data/zeroR_oneR_weka.csv', sep = ';', header = T)
+```
+
+As base, the ZeroR has a accuracy of 66,23%. Which is logical, because zeroR select the most frequent classifier. In this case T2 represents 66,23% of the instances. so ZeroR select T2 as right. 
+
+OneR has a accuracy of 55,8%. OneR selects the tumor stage based of single protein value, using cut-off points in the value.
+
+Both simple algorithms gives a good baseline of what the minimum expected accuracy can be. Speed of these algorithms is excellent. 
+
+### 6.3.2 Advanced algoritmhs
+
+With a set baseline, more advanced algorithms are used. these advanced algorithms consists: decisions trees, Bayes and logics. 
+
+Advanced algorithms:
+
+- J48
+- Random Forest
+- Naïve Bayes
+- Simple Logistic
+- SVM (SMO)
+- Nearest Neighbour (IB1)
+
+All those algorithms will be recorded, same as the baseline.
+
+
+```{r}
+advan_tbl <- read.csv('Data/advanced_algorithms_weka.csv', sep = ';')
+colnames(advan_tbl)[1] <- ''
+pander(advan_tbl)
+```
+In above table, six algorithms are used on the dataset. with mixed results. 
+
+looking at accuracy, Random Forest, simple logistic and SMO preform equally. With naïve bayes not fall far behind. They all around the 66% mark, same as ZeroR. But they all acquire it on a different way. Random forest and simple logistic have the exact same accuracy and TP/FP rate. only a speed difference, with is not big. 
+
+Naïve bayes is close to the baseline, and identifies the most as T2, true and false. but with a little classifying spread. SMO has the bes accuracy with 66,33% and identifies also a small part of t3 correct. both of these algorithms are very fast.
+
+J48 has only a accuracy of 33,7%, which is disappointing. But, J48 has a large spread between the Tumor stages. only 47,1% of T2 is correct, yet other stages are identified positive or negative. 
+
+Same for IB1 as J48, low accuracy, big spread between tumor stages. And IB1 correctly identifies more Stages then J48. IB1 as in all 4 Tumor stages a true positive rate of ~20%. Which is the best out of the six algorithms.   
 
