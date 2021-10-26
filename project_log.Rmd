@@ -6,10 +6,6 @@ output:
   pdf_document:
     toc: yes
     toc_depth: 3
-  html_document:
-    toc: yes
-    toc_depth: '3'
-    df_print: paged
 ---
 
 ```{r warning=F, message=F}
@@ -23,6 +19,8 @@ library(ggrepel)
 library(forcats)
 library(scales)
 library(knitr)
+library(gridExtra)
+library(grid)
 ```
 
 # 1. Intro
@@ -73,7 +71,7 @@ The data will be loaded from the Data folder in the repository.
 # load data
 proteomes <- as.data.frame(read.csv(file = 'Data/cancer_proteomes.csv'))
 patient_data <- as.data.frame(read.csv(file = "Data/data_patients.csv"))
-knitr::kable(head(proteomes[, 1:6]), caption = "Proteomes dataset")
+head(proteomes[, 1:6])
 ```
 
 The proteomes file contain 86 columns: 3 columns with gene information, 80 columns of expression data with TCGA.ID (with 3 duplicates) and 3 columns of expression data of healthy persons.   
@@ -81,7 +79,7 @@ The proteomes file contain 86 columns: 3 columns with gene information, 80 colum
 Also the clinical patient data is loaded in. Containing the tumor stage annotation that will be used. 
 
 ```{r}
-knitr::kable(head(patient_data[, 1:6]), caption = "Clinical patient dataset")
+head(patient_data[, 1:6])
 ```
 
 
@@ -95,13 +93,14 @@ To make the proteomes file more workable, the column name with the TCGA.ID will 
 # Save the RefSeq numbers
 nm <- proteomes$RefSeq_accession_number
 
-# Exclude col 1-3 and 84-86
-proteomes <- as.data.frame(t(proteomes[,4:83]))
+# Exclude col 1-3 and 84 -86
+proteomes <- as.data.frame(t(proteomes[,4:86]))
 colnames(proteomes) <- nm
 
 # Bind the colnames to the rows
 proteomes <- cbind(rownames(proteomes), data.frame(proteomes, row.names=NULL))
 colnames(proteomes)[1] <- "Complete.TCGA.ID"
+proteomes
 ```
 
 To match the ID of the clinical patient data, the ID of the proteomes data will be transformed. Also the 3 duplicates will be removed.
@@ -120,7 +119,8 @@ proteomes_new <- proteomes
 
 # Remove duplicates
 proteomes_new <- proteomes_new[!duplicated(proteomes_new$Complete.TCGA.ID), ]
-knitr::kable(head(proteomes_new[, 1:6]), caption = "Transformed proteomes dataset")
+proteomes_new
+# knitr::kable(head(proteomes_new[, 1:6]), caption = "Transformed proteomes dataset")
 ```
 Now the proteomes file has the ID in the first column. Then the next 12.554 columns are the expression data of the corresponding protein.
 
@@ -137,6 +137,7 @@ proteomes_complete <- proteomes_complete[-c(2:6,8:30)]
 
 # Rename column
 colnames(proteomes_complete)[2] <- 'Tumor_Stage'
+
 knitr::kable(head(proteomes_complete[, 1:6]), caption = "Added tumor annotation")
 ```
 
@@ -400,7 +401,8 @@ Because of the dominance of T2, many algorithms will tend to choose T2. Especial
 First ZeroR and OneR are used to measure baseline performance.
  
 ```{r}
-read.csv('Data/zeroR_oneR_weka.csv', sep = ';', header = T)
+base <- read.csv('Data/zeroR_oneR_weka.csv', sep = ';', header = T)
+pander(base)
 ```
 
 As base, the ZeroR has a accuracy of 66,23%. Which is logical, because zeroR select the most frequent classifier. In this case T2 represents 66,23% of the instances. so ZeroR select T2 as right. 
@@ -427,7 +429,7 @@ All those algorithms will be recorded, same as the baseline.
 
 ```{r}
 advan_tbl <- read.csv('Data/advanced_algorithms_weka.csv', sep = ';')
-colnames(advan_tbl)[1] <- ''
+colnames(advan_tbl)[1] <- '.'
 pander(advan_tbl)
 ```
 In above table, six algorithms are used on the dataset. with mixed results. 
@@ -438,5 +440,151 @@ Naïve bayes is close to the baseline, and identifies the most as T2, true and f
 
 J48 has only a accuracy of 33,7%, which is disappointing. But, J48 has a large spread between the Tumor stages. only 47,1% of T2 is correct, yet other stages are identified positive or negative. 
 
-Same for IB1 as J48, low accuracy, big spread between tumor stages. And IB1 correctly identifies more Stages then J48. IB1 as in all 4 Tumor stages a true positive rate of ~20%. Which is the best out of the six algorithms.   
+Same for IB1 as J48, low accuracy, big spread between tumor stages. And IB1 correctly identifies more Stages then J48. IB1 as in all 4 Tumor stages a true positive rate of ~20%. Which is the best out of the six algorithms. 
+
+
+Considering the results of all these algorithms, not one stands really out. Looking at accuracy: Random forest, Naïve bayes, simple logistic and SMO preform somewhat equally. All the algorithms are fast, with simple logistic as slowest. And IB1 has the most spread between the tumor stages.
+
+
+# 7. Preforming protein filtering
+
+With so many proteins, not many difference are able to be seen. In the EDA there was not much variation in the whole data set or between the tumor stages. In the results, random proteins showed difference, so there is difference in the dataset. By selecting a algorithm for the machine learning, 66% was the highest possible. Manley of all the many proteins. 
+
+## 7.1 Different expressed proteins
+
+Not a these proteins are significant different form each other. Probably a few 1000 proteins show different expressions. These Different expressed proteins are good targets for a better dataset, because many proteins are irrelevant if they show little or not variation. A Different expressed protein is a protein that shows a significant different expression level relative to the other values across the tumor stages. 
+
+To highlight and filter out these Different expressed proteins, a couple of coding steps will be made. For reference the data of the healthy patients will be added by the dataset. 
+
+```{r}
+# select the row of the healthy patients and assign a tumor stage to them
+healthy <- proteomes_new[78:80,]
+stages <- c('T0', 'T0', 'T0')
+healthy$Tumor_Stage <- stages
+healthy <- healthy %>%
+  relocate(Tumor_Stage, .after = 1)
+
+# bind the original and new rows together 
+proteomes_with_healthy <- rbind(proteomes_complete, healthy)
+head(proteomes_with_healthy[75:80,])
+```
+
+The healthy patients are labelled as T0, because they didn't have a tumor. The dataset ought to be 'prepared' by removing the NA's and transform the Tumor stage to a factor.
+
+
+```{r}
+# Remove the NA's and replace them with the mean of that column
+for(i in 1:ncol(proteomes_with_healthy)){
+  proteomes_with_healthy[is.na(proteomes_with_healthy[,i]), i] <- mean(proteomes_with_healthy[,i], na.rm = TRUE)
+}
+
+# Cast Tumor stage as factor and relocate to last column
+proteomes_with_healthy <- proteomes_with_healthy %>%
+                          mutate(Tumor_Stage = factor(Tumor_Stage)) %>%
+                          relocate(Tumor_Stage, .after=last_col())
+```
+
+
+With a ready dataset, the protein with significant different expressions will be filtered out. 
+
+```{r}
+# Filter out the different proteins with a kruskal-Wallis test and  save the P-value to a list
+res <- list()
+for(name in colnames(proteomes_with_healthy)[2:(ncol(proteomes_with_healthy)-1)]) { 
+  f <- paste0(name, ' ~ Tumor_Stage')
+  pval <- kruskal.test(formula = formula(f), data = proteomes_with_healthy)$p.value
+  if(pval < 0.05){ 
+    res[[name]] <- p.adjust(pval, method = 'bonferroni')
+  }
+}
+
+# filter out the different proteins
+p.values <- t(unlist(res))
+length(p.values)
+filtered_proteomes <- proteomes_with_healthy[,c(colnames(p.values))]
+```
+
+As last, the Id and tumor stage are put back in place.
+
+```{r}
+# add ID back
+ID <- proteomes_with_healthy[,1]
+filtered_proteomes <- cbind(filtered_proteomes, ID)
+colnames(filtered_proteomes)[ncol(filtered_proteomes)] <- "Complete.TCGA.ID"
+filtered_proteomes <-  filtered_proteomes %>%
+                          relocate(Complete.TCGA.ID, .before = 1)
+
+# Add Tumor stage back
+Tum <- proteomes_with_healthy[,ncol(proteomes_with_healthy)]
+filtered_proteomes <- cbind(filtered_proteomes, Tum)
+colnames(filtered_proteomes)[ncol(filtered_proteomes)] <- "Tumor_Stage"
+filtered_proteomes <- filtered_proteomes %>%
+                          mutate(Tumor_Stage = factor(Tumor_Stage))
+
+head(filtered_proteomes)[,1:6]
+```
+
+The Data now only consist of 1396 proteins instead of 12.554. With these significant different proteins the algorithms will be run again. The filtered dataset is written to a csv file
+
+```{r}
+# Write to csv, removes healthy patients for classifying
+write.csv(filtered_proteomes[1:77,], 'Data/filtered_proteome_ML_data.csv')
+```
+
+## 7.2 ML algorithms with filtered dataset
+
+With a filtered dataset the same algorithms will be used to see the difference.
+
+### 7.2.1 Baseline
+
+As base, ZeroR and OneR are used again
+
+```{r}
+# load algorithm results
+base_filtered <- read.csv('Data/zeroR_oneR_weka_filtered.csv', sep = ';', header = T)
+
+grid.arrange(
+  tableGrob(base),
+  tableGrob(base_filtered),
+  nrow = 1,
+  top = textGrob('Normal vs filtered')
+)
+```
+
+ZeroR don't preform better then before, with the exact same statistics. OneR does it slightly better with a 3% accuracy increase. Therefore it look likes a improvement, at base level.
+
+### 7.2.2 Advanced algorithms
+
+Same story here, same algorithms as with the unfiltered dataset. 
+
+```{r}
+# load algorithm results
+advanced_filtered <- read.csv('Data/advanced_algorithms_weka_filtered.csv', sep = ';')
+colnames(advanced_filtered)[1] <- '.'
+
+
+pander(advan_tbl, caption = 'original')
+pander(advanced_filtered, caption = 'fitered')
+```
+In general the accuracy is mostly the same with the first 4 algorithms, but the difference in in the last two. SMO and IBK preform well with a accuracy of 70%+. which means that they preform also in other stages than T2. looking at the spread of the TP and FP between the stages, SMO also wins relative to IBK. SMO is the clear winner here, but there is one other aspect which is important for the final algorithm.
+
+Classifying T4 as a T1 is a very bad error, life threatening in real. Therefore weight can be added to a miss classification. This can be done with a cost sensitive matrix. Where penalties are added to the degree of wrong classification. In this case the weighs don't changes the outcome of the TP/FP rate. in fact, if a weight of 500 is added to classifying T4 as T1, the accuracy drops to a bottom low of 23%... Thus cost sensitive does not add anything in this case. So SMO is the one to stick with.
+
+
+
+## x feedbakck
+
+betere file name
+eigen naam/ studentnummer in file (name)
+geen colnames in plot
+pas grootte aan aan document
+axes hebben eenheden
+niet figuren met dubbele betekenins
+conclusie = verder gaan dan de resultaten
+geen code in resultaten
+paper structuur voorbeelden (pubmed)
+
+
+
+
 
