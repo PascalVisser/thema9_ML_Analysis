@@ -1,6 +1,7 @@
 ---
 title: "Project log"
 author: "Pascal Visser"
+studentnumber: 410729
 date: "14-9-2021"
 output:
   pdf_document:
@@ -9,7 +10,7 @@ output:
 ---
 
 ```{r warning=F, message=F}
-# Libraries
+# Used libraries
 library(ggplot2)
 library(reshape2)
 library(dplyr)
@@ -32,11 +33,10 @@ In a research of breast cancer proteomes, 77 breast cancer samples are generated
 
 The 77 breast cancer proteome expression values are log2 iTRAQ ratios for each sample. It contains ~12.000 proteins for each individual sample. This database also contains three samples from healthy individuals.
 
-{MEER ACHTERGROND}
 
 ## 1.2 Research question 
 
-Is it possible to predict a breast cancer stage, based of the expression data from 77 cancer proteomes?
+Is it possible to predict a breast cancer stage with machine learning, based of the protein expression data from 77 cancer proteomes?
 
 # 2. Data
 
@@ -54,38 +54,39 @@ The goal of this research is to see if it is possible to predict the tumor stage
 
 All these factors can indicate the cancerous state of the patient. In this case, tumor stage is the most important factor. Because the prediction of this tumor stage will be based of the expression level of the samples. 
 
-The tumor stage information runs from T1 till T4, with T1 as the least malicious. With the following classification:
+The tumor stage information runs from T1 to T4, with T1 as the least malicious. With the following classification:
 
 - T1: The tumor in the breast is 20 millimetres (mm) or smaller in size at its widest area
 - T2: The tumor is larger than 20 mm but not larger than 50 mm.
 - T3: The tumor is larger than 50 mm.
 - T4: The tumor has grown into the chest wall and/or skin. Metastasis is likely.  
 
-The tumor stage is a good indication of how worse the cancer situation is. Thus, a good variable to predict with the expression data. 
+The tumor stage is a good indication of how worse the cancer situation is. Thus, a good variable to predict with the protein expression data. 
 
 ## 2.1 load data
 
 The data will be loaded from the Data folder in the repository. 
 
 ```{r}
-# load data
+# load proteomes data
 proteomes <- as.data.frame(read.csv(file = 'Data/cancer_proteomes.csv'))
-patient_data <- as.data.frame(read.csv(file = "Data/data_patients.csv"))
-head(proteomes[, 1:6])
+kable(head(proteomes[, 1:6]), caption = "Proteomes dataset")
 ```
 
-The proteomes file contain 86 columns: 3 columns with gene information, 80 columns of expression data with TCGA.ID (with 3 duplicates) and 3 columns of expression data of healthy persons.   
+The proteomes file contain 86 columns: the first 3 columns with gene information, 80 columns of expression data with TCGA.ID (with 3 duplicates) and 3 columns of expression data of healthy persons.   
 
 Also the clinical patient data is loaded in. Containing the tumor stage annotation that will be used. 
 
 ```{r}
-head(patient_data[, 1:6])
+# load clinical patient data
+patient_data <- as.data.frame(read.csv(file = "Data/data_patients.csv"))
+kable(head(patient_data[, 1:7]), caption = "Clinical patient data")
 ```
 
 
 ## 2.2 Transform data
 
-To make the proteomes file more workable, the column name with the TCGA.ID will become the row name. Also the first 3 and the last 3 row will be excluded. The first 3 columns contains RefSeq number, gene_symbol and gene name. The RefSeq number will be saved as column name. The last 3 columns contains expression data of healthy people with no ID match to the patients, so this information is not needed. 
+To make the proteomes file more workable, the column name with the TCGA.ID will become the row name. Also the first 3 and the last 3 row will be excluded. The first 3 columns contains RefSeq number, gene_symbol and gene name. The RefSeq number will be saved as column name. The last 3 columns contains expression data of healthy people with no ID match to the patients, so this information is not needed, for now. 
 
 ```{r}
 # Transform colnames and rownames
@@ -100,13 +101,15 @@ colnames(proteomes) <- nm
 # Bind the colnames to the rows
 proteomes <- cbind(rownames(proteomes), data.frame(proteomes, row.names=NULL))
 colnames(proteomes)[1] <- "Complete.TCGA.ID"
-proteomes
+kable(head(proteomes[, 1:6]), caption = "Clinical patient data")
 ```
+Now the dataframe is more workable throughout the analysis. 
 
-To match the ID of the clinical patient data, the ID of the proteomes data will be transformed. Also the 3 duplicates will be removed.
+
+With 77 proteomes and 105 patients data, ID's must be matched into 1 dataframe. The final product going to be a dataframe with matching tumor stages of the patients with corresponds to the proteomes ID. To match the ID's of the clinical patient data, the ID of the proteomes data will be transformed. Also the 3 duplicates will be removed.
 
 ```{r}
-# Make function to transform TGCA ID
+# Make function to transform TGCA.id
 clinical.id <- function(proteome.id) {
   x = substr(proteome.id, 4, 7)
   y = substr(proteome.id, 0, 2)
@@ -119,30 +122,29 @@ proteomes_new <- proteomes
 
 # Remove duplicates
 proteomes_new <- proteomes_new[!duplicated(proteomes_new$Complete.TCGA.ID), ]
-proteomes_new
-# knitr::kable(head(proteomes_new[, 1:6]), caption = "Transformed proteomes dataset")
+kable(head(proteomes_new[, 1:6]), caption = "Transformed proteomes dataset")
 ```
-Now the proteomes file has the ID in the first column. Then the next 12.554 columns are the expression data of the corresponding protein.
+Now the proteomes file has the correct ID in the first column, which can be match with the clinical patient data. The next 12.554 columns are the protein expression data of the patients. 
 
 ## 2.3 Adding tumor data
 
-Next the tumor stage annotation for the patient_data must merge into the proteomes data frame.
+Next the tumor stage annotation for the clinical patient data must merge into the proteomes data frame.
 
 ```{r}
 # Join data frames by ID
 proteomes_complete <- merge(patient_data, proteomes_new, BY = 'Complete.TCGA.ID')
 
-# Drop unwanted columns
+# Drop unwanted columns with clinical annotations
 proteomes_complete <- proteomes_complete[-c(2:6,8:30)]
 
 # Rename column
 colnames(proteomes_complete)[2] <- 'Tumor_Stage'
 
-knitr::kable(head(proteomes_complete[, 1:6]), caption = "Added tumor annotation")
+kable(head(proteomes_complete[, 1:6]), caption = "Added tumor annotation")
 ```
 
 
-Now the Tumor stage annotation is added to the data frame.
+Now the Tumor stage annotation is added to the data frame at the second column. Which is necessary for machine learning classification. 
 
 ## 2.4 Wide to long format
 
@@ -152,10 +154,10 @@ For many functions R expects data to be in a long format, rather than a wide for
 # wide to long format with reshape2 package
 pro_long <- melt(proteomes_complete, id.vars = c("Complete.TCGA.ID", "Tumor_Stage"), 
 variable.name = "Protein_RefSeq")
-knitr::kable(head(pro_long, 8), caption = "proteomes data in long format")
+kable(head(pro_long, 8), caption = "proteomes data in long format")
 ```
 
-Now the data is in a workable long format, that is better to be handled by R. This will complete the data formatting. 
+Now the data is in a workable long format, that is better to be handled by the package ggplot. This will complete the data formatting. 
 
 
 # 3. Exploratory data analysis
@@ -183,7 +185,7 @@ The median and mean of all the expression values are negative, which means that 
 # apply a summary per Tumor stage
 pander(tapply(pro_long$value, pro_long$Tumor_Stage, summary))
 ```
-Same story here, negative means and medians, couple of outliers at the max. and min. No noticeable differences.   
+Same story here, negative means and medians, couple of outliers at the max. and min. No noticeable differences between the stages.   
 
 ## 3.2 Missing data
 
@@ -204,7 +206,7 @@ ggplot(nas, aes(Var1, Freq, group = 1)) + geom_line() + geom_point() +
 labs(x = "Number of NA's", y = 'Frequency of proteins', title = "Figure 1: Frequency of NA's per count") +
 scale_x_discrete(guide = guide_axis(check.overlap = TRUE))
 ```
-Out of the total 12553 protein in the dataset, 8017 proteins contain zero Na's, which means that 4536 protein have one or more NA's. In the graph is to see that low to medium counts of NA's are no uncommon.
+Out of the total 12553 protein in the dataset, 8017 proteins contain zero Na's, which means that 4536 protein have one or more NA's. In the graph is to see that low to medium counts of NA's are no uncommon sight. The graph need to be read as, there are 350+ proteins with 2 NA's. And there are 95 proteins with 7 NA's. 
 
 ## 3.3 Distribution
 
@@ -230,14 +232,7 @@ plot2
 
 The above distribution graphs shows very little variation in the data. In the general expression value plot, the peak lay around the 0, with a little more distribution towards the negative. 
 
-In the tumor stage density, the 4 stage overlap in the plot. But the difference is so little, that the overlap barely can be seen. 
-
-```{r warnings=F}
-# ggplot(pro_long, aes(x = value, y = Tumor_Stage)) +
-# geom_point(na.rm = T) + labs(x = 'Expression value', y = 'Tumor Stage', title = 'Figure 4: Tumor stage distribution')
-```
-
-Also, the plot above shows the distribution by tumor group as a scatterplot. Here the outliers can better be identified, but no real difference between the groups. 
+In the tumor stage density, the 4 stages overlap in the plot. But the difference is so little, that the overlap barely can be seen. Which means that there is no notable difference in the total sum of the expression values per tumor stage. 
 
 ## 3.4 Tumor stage distribution 
 
@@ -254,7 +249,7 @@ prtage <- paste(round(100*stage_count$n/sum(stage_count$n), 2), "%")
 
 # plot pie chart
 ggplot(stage_count, aes(x = '', y = n, fill = Tumor_Stage)) + geom_bar(stat = 'identity', width = 2) + coord_polar('y', start = 0) +
-theme_void() +  geom_text(aes(label = prtage), position = position_stack(vjust = 0.50), size = 3.5) + scale_fill_brewer(palette="Set1") + labs(title = 'Figure 5: Percentage of Tumor stages found in patients')
+theme_void() +  geom_text(aes(label = prtage), position = position_stack(vjust = 0.50), size = 3.5) + scale_fill_brewer(palette="Set1") + labs(title = 'Figure 4: Percentage of Tumor stages found in patients')
 ```
 Tumor stage T2 is obvious the most common stage. 66% of the patients are in this stage. T1 and T3 share the about the same percentage. T4 is the rare group , with only 6,5% of the patients. Patients in stage T4 have a high mortality rate, so they die early. that's why the T4 percentage probably is so small. 
 
@@ -268,7 +263,7 @@ The summary of the tumor stages (table 7) showed nothing but the total spread of
 ```{r}
 ggplot(pro_long, aes(Tumor_Stage, value)) +
 geom_boxplot(fill='blue', alpha = 0.2, na.rm = T) +
-labs(x = 'Tumor Stage', y = 'Expression value',title = 'Figure 6: Boxplot summary per Tumor group')
+labs(x = 'Tumor Stage', y = 'Expression value',title = 'Figure 5: Boxplot summary per Tumor group')
 ```
 
 The spread of the data per group is very wide. In above boxplot, the outliers are clearly visible. This amount of outliers is normal for a dataset like this. As shown in the tumor stage distribution (figure 2/3), the biggest part of the values lies around the means of the group. 
@@ -289,7 +284,7 @@ p0 <- pro_long %>%
 p0 %>%
   ggplot(aes(x = Tumor_Stage, y = value, fill = Protein_RefSeq)) +
   geom_boxplot(na.rm = T) + geom_jitter(width = 0.01, alpha = 0.3) +
-  labs(x = 'Tumor Stage', y = 'Expression value', title = 'Figure 7: Boxplot with random proteins') +
+  labs(x = 'Tumor Stage', y = 'Expression value', title = 'Figure 6: Boxplot with random proteins') +
   scale_fill_brewer(palette="Set1")
 ```
 
@@ -302,18 +297,16 @@ p1 <- pro_long %>%
 p1 %>%
   ggplot(aes(x = Tumor_Stage, y = value, fill = Protein_RefSeq)) +
   geom_boxplot(na.rm = T) +
-  labs(x = 'Tumor Stage', y = 'Expression value', title = 'Figure 8: Boxplot with random proteins #2') +
+  labs(x = 'Tumor Stage', y = 'Expression value', title = 'Figure 7: Boxplot with random proteins #2') +
   scale_fill_brewer(palette="Set2")
 ```
 Same here, very different distributions of values. But this time more centred around the mean. Yet there can not be a clear conclusion made based of these boxplot. For a good and accurate answer, there must be a boxplot per tumor group per protein be made and compared to each other. which is maybe not statistic responsible. And if there are protein with clear differences per tumor level, the biological relevance plays also a part.
 
 ## 4.2 Overall result
 
-Overall is the data loaded, transformed and analysed. with mixed results. There was a expectation that the groups overall showed a difference, but they didn't, at least not on the total scale. By analysing per protein, there are more notable differences. but thy can be difficult and time consuming to find. 
+Overall is the data loaded, transformed and analysed. with mixed results. There was a expectation that the groups overall showed a difference, but they didn't, at least not on the total scale. By analysing per protein, there are more notable differences.
 
 In the EDA is a good view made of the data. By different plots and tables, the data is better understandable. The total summary and summary per tumor group is shown. Total count of NA's and NA count per protein is plotted. The overall distribution and distribution per tumor group. And also the  tumor groups per patients is plotted. 
-
-With these analysis the data is explored and analysis, ready for a discussion. 
 
 
 # 5. EDA Discusssion and conclusion
@@ -337,7 +330,9 @@ For the machine learning (ML) a program named Weka will be used. Weka is a colle
 
 Weka demand files to be a specific file type in order to be accepted. In this project, the data will be cast to a csv file type. To function properly, Weka wants the classifier at the last column for better processing. So the tumor stage will be set to the last column.
 
-Also the NA's will be converted to the mean of that column. Because otherwise Weka will label the columns with NA's as string. The transformed data will be written to a csv file. 
+Also the NA's will be converted to the mean of that column. Because otherwise Weka will label the columns with NA's as string. The transformed data will be written to a csv file.
+
+The dataset what will be used is the proteomes complete dataset. Before transforming it to the long format. 
 
 ```{r warning=F}
 # Relocate Tumor stage to the end
@@ -371,7 +366,7 @@ Obviously a high accuracy is desired by all means. Then the question is, how acc
 
 Speed of the algorithm is important by big usage. Implementing the model in a local environment, 1 to 2 minutes is okay. As it would not calculate more than 10 times a day. But in a large application, an fast algorithm is a demand. 
 
-The size of a Decision tree is a important factor. With a large tree with many leave, overfitting could be possible. as the algorithm is to specific on the trainings set. A small, but accurate tree is desirable. 
+The size of a Decision tree is a important factor. With a large tree with many leave, overfitting could be possible. As the algorithm is to specific on the trainings set. A small, but accurate tree is desirable. 
 
 A confusion matrix, is a specific table that allows visualization of the performance of an algorithm. Each row of the matrix represents the instances in an actual class while each column represents the instances in a predicted class. This indicates also the rate of true positives, true negatives, false positives and false negatives. Identifying T2 as T4 can cause serious problems. The errors in the matrix will weight heavy on the model performance.
 
@@ -394,7 +389,7 @@ Cancer stage distribution:
 -T3 = 11 instances
 -T4 = 5  instances
 
-Because of the dominance of T2, many algorithms will tend to choose T2. Especially ZeroR. 
+Because of the dominance of T2, many algorithms will tend to choose T2. Because this gives automatically 66,23% accuracy. 
 
 ### 6.3.1 Baseline
 
@@ -413,7 +408,7 @@ Both simple algorithms gives a good baseline of what the minimum expected accura
 
 ### 6.3.2 Advanced algoritmhs
 
-With a set baseline, more advanced algorithms are used. these advanced algorithms consists: decisions trees, Bayes and logics. 
+With a set baseline of 66,23%, more advanced algorithms are used. These advanced algorithms consists of: decisions trees, Bayes and logics. 
 
 Advanced algorithms:
 
@@ -422,9 +417,9 @@ Advanced algorithms:
 - Naïve Bayes
 - Simple Logistic
 - SVM (SMO)
-- Nearest Neighbour (IB1)
+- K-Nearest Neighbour (IBk)
 
-All those algorithms will be recorded, same as the baseline.
+All those algorithms will be recorded, same as the baseline. With the default options.
 
 
 ```{r}
@@ -452,12 +447,12 @@ With so many proteins, not many difference are able to be seen. In the EDA there
 
 ## 7.1 Different expressed proteins
 
-Not a these proteins are significant different form each other. Probably a few 1000 proteins show different expressions. These Different expressed proteins are good targets for a better dataset, because many proteins are irrelevant if they show little or not variation. A Different expressed protein is a protein that shows a significant different expression level relative to the other values across the tumor stages. 
+Not a these proteins are significant different form each other. Probably a few 1000 proteins show different expressions. These Different expressed proteins are good targets for a better dataset, because many proteins are irrelevant if they show little or no variation. A Different expressed protein is a protein that shows a significant different expression level relative to the other values across the tumor stages. 
 
 To highlight and filter out these Different expressed proteins, a couple of coding steps will be made. For reference the data of the healthy patients will be added by the dataset. 
 
 ```{r}
-# select the row of the healthy patients and assign a tumor stage to them
+# select the row of the healthy patients and assign tumor stage 'T0'to them
 healthy <- proteomes_new[78:80,]
 stages <- c('T0', 'T0', 'T0')
 healthy$Tumor_Stage <- stages
@@ -466,7 +461,7 @@ healthy <- healthy %>%
 
 # bind the original and new rows together 
 proteomes_with_healthy <- rbind(proteomes_complete, healthy)
-head(proteomes_with_healthy[75:80,])
+kable(head(proteomes_with_healthy[75:80,1:6]), caption = "Added healthy persons")
 ```
 
 The healthy patients are labelled as T0, because they didn't have a tumor. The dataset ought to be 'prepared' by removing the NA's and transform the Tumor stage to a factor.
@@ -474,7 +469,7 @@ The healthy patients are labelled as T0, because they didn't have a tumor. The d
 
 ```{r}
 # Remove the NA's and replace them with the mean of that column
-for(i in 1:ncol(proteomes_with_healthy)){
+for(i in which(sapply(proteomes_with_healthy, is.numeric))){
   proteomes_with_healthy[is.na(proteomes_with_healthy[,i]), i] <- mean(proteomes_with_healthy[,i], na.rm = TRUE)
 }
 
@@ -485,7 +480,7 @@ proteomes_with_healthy <- proteomes_with_healthy %>%
 ```
 
 
-With a ready dataset, the protein with significant different expressions will be filtered out. 
+With a ready dataset, the protein with significant different expressions will be filtered out. A more strict filtering with p-values is chosen, Instead of the standard 0.05, because this results in a more select group of proteins. 
 
 ```{r}
 # Filter out the different proteins with a kruskal-Wallis test and  save the P-value to a list
@@ -493,16 +488,18 @@ res <- list()
 for(name in colnames(proteomes_with_healthy)[2:(ncol(proteomes_with_healthy)-1)]) { 
   f <- paste0(name, ' ~ Tumor_Stage')
   pval <- kruskal.test(formula = formula(f), data = proteomes_with_healthy)$p.value
-  if(pval < 0.05){ 
+  if(pval < 0.01){ 
     res[[name]] <- p.adjust(pval, method = 'bonferroni')
   }
 }
 
 # filter out the different proteins
 p.values <- t(unlist(res))
-length(p.values)
+cat("Proteins left = ",length(p.values))
 filtered_proteomes <- proteomes_with_healthy[,c(colnames(p.values))]
 ```
+With a p-value of 0.05 210 protein will be left, which is still many. With a small p-value of 0.01, 210 proteins are still in the dataset. 210 is enough and strict. 
+
 
 As last, the Id and tumor stage are put back in place.
 
@@ -520,11 +517,9 @@ filtered_proteomes <- cbind(filtered_proteomes, Tum)
 colnames(filtered_proteomes)[ncol(filtered_proteomes)] <- "Tumor_Stage"
 filtered_proteomes <- filtered_proteomes %>%
                           mutate(Tumor_Stage = factor(Tumor_Stage))
-
-head(filtered_proteomes)[,1:6]
 ```
 
-The Data now only consist of 1396 proteins instead of 12.554. With these significant different proteins the algorithms will be run again. The filtered dataset is written to a csv file
+The Data now only consist of 210 proteins instead of 12.554. With these significant different proteins the algorithms will be run again. The filtered dataset is written to a csv file
 
 ```{r}
 # Write to csv, removes healthy patients for classifying
@@ -551,12 +546,11 @@ grid.arrange(
 )
 ```
 
-ZeroR don't preform better then before, with the exact same statistics. OneR does it slightly better with a 3% accuracy increase. Therefore it look likes a improvement, at base level.
+ZeroR don't preform better then before, with the exact same statistics. OneR does it slightly better with a ~2% accuracy increase. Therefore it looks likes a improvement, at a base level.
 
 ### 7.2.2 Advanced algorithms
 
 Same story here, same algorithms as with the unfiltered dataset. 
-
 ```{r}
 # load algorithm results
 advanced_filtered <- read.csv('Data/advanced_algorithms_weka_filtered.csv', sep = ';')
@@ -564,27 +558,17 @@ colnames(advanced_filtered)[1] <- '.'
 
 
 pander(advan_tbl, caption = 'original')
-pander(advanced_filtered, caption = 'fitered')
+pander(advanced_filtered, caption = 'filtered')
 ```
-In general the accuracy is mostly the same with the first 4 algorithms, but the difference in in the last two. SMO and IBK preform well with a accuracy of 70%+. which means that they preform also in other stages than T2. looking at the spread of the TP and FP between the stages, SMO also wins relative to IBK. SMO is the clear winner here, but there is one other aspect which is important for the final algorithm.
-
-Classifying T4 as a T1 is a very bad error, life threatening in real. Therefore weight can be added to a miss classification. This can be done with a cost sensitive matrix. Where penalties are added to the degree of wrong classification. In this case the weighs don't changes the outcome of the TP/FP rate. in fact, if a weight of 500 is added to classifying T4 as T1, the accuracy drops to a bottom low of 23%... Thus cost sensitive does not add anything in this case. So SMO is the one to stick with.
+In general the accuracy is strongly improved, with the most difference in SMO. SMO preforms good with a accuracy of 81%. which means that it preforms well also in other stages than T2. looking at the spread of the TP and FP between the stages, SMO also wins relative to IBK and simple Logistic. SMO is the clear winner here. 
 
 
+# 8. Final result
 
-## x feedbakck
+After the modification of the dataset, EDA, algorithm testing, data cleaning and algorithm testing with cleaned data. SMO is the final outcome of the machine learning phases. This algorithm can predict out of 4 cancerous stages the correct stage with a 81% accuracy, based of 210 breast cancer related proteins of 77 patients. with references of 3 healthy patients. 
 
-betere file name
-eigen naam/ studentnummer in file (name)
-geen colnames in plot
-pas grootte aan aan document
-axes hebben eenheden
-niet figuren met dubbele betekenins
-conclusie = verder gaan dan de resultaten
-geen code in resultaten
-paper structuur voorbeelden (pubmed)
+But, as said in the determine quality metrics: 'with deadly diseases like cancers, 80% is not good enough. Which means that one in five is classified in the wrong Tumor stage, which can have serious consequences'. This is true, but with optimisation 81% is the highest accuracy possible. 
 
+The research question: 'Is it possible to predict a breast cancer stage with machine learning, based of the protein expression data from 77 cancer proteomes?. Yes and No. It is possible to predict a tumor stage with machine learning. But, it can only predicted with 81% accuracy. Thus, in serious applications, it is useless. Because of the low accuracy. But, with a general practitioner, it can be useful for a prediction. That a patient is possible in a certain tumor stage. 
 
-
-
-
+The answer of the research question depends on the application of the model. 
