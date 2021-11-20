@@ -1,5 +1,5 @@
 ---
-title: "Project log"
+title: "EDA/machine learning breast cancer proteomes"
 author: "Pascal Visser"
 studentnumber: 410729
 date: "14-9-2021"
@@ -206,7 +206,7 @@ ggplot(nas, aes(Var1, Freq, group = 1)) + geom_line() + geom_point() +
 labs(x = "Number of NA's", y = 'Frequency of proteins', title = "Figure 1: Frequency of NA's per count") +
 scale_x_discrete(guide = guide_axis(check.overlap = TRUE))
 ```
-Out of the total 12553 protein in the dataset, 8017 proteins contain zero Na's, which means that 4536 protein have one or more NA's. In the graph is to see that low to medium counts of NA's are no uncommon sight. The graph need to be read as, there are 350+ proteins with 2 NA's. And there are 95 proteins with 7 NA's. 
+Out of the total 12554 protein in the dataset, 8017 proteins contain zero Na's, which means that 4536 protein have one or more NA's. In the graph is to see that low to medium counts of NA's are no uncommon sight. The graph need to be read as, there are 350+ proteins with 2 NA's. And there are 95 proteins with 7 NA's. 
 
 ## 3.3 Distribution
 
@@ -382,13 +382,13 @@ In The test options, cross-validation is set to 10 Folds.
 TP = True positive
 FP = false positive
 
-Cancer stage distribution: 
-
--T1 = 10 instances 
--T2 = 51 instances
--T3 = 11 instances
--T4 = 5  instances
-
+Cancer stage distribution:   
+  
+-T1 = 10 instances   
+-T2 = 51 instances  
+-T3 = 11 instances  
+-T4 = 5  instances  
+  
 Because of the dominance of T2, many algorithms will tend to choose T2. Because this gives automatically 66,23% accuracy. 
 
 ### 6.3.1 Baseline
@@ -397,7 +397,7 @@ First ZeroR and OneR are used to measure baseline performance.
  
 ```{r}
 base <- read.csv('Data/zeroR_oneR_weka.csv', sep = ';', header = T)
-pander(base)
+pander(base, caption = "Baseline accuracy")
 ```
 
 As base, the ZeroR has a accuracy of 66,23%. Which is logical, because zeroR select the most frequent classifier. In this case T2 represents 66,23% of the instances. so ZeroR select T2 as right. 
@@ -425,8 +425,9 @@ All those algorithms will be recorded, same as the baseline. With the default op
 ```{r}
 advan_tbl <- read.csv('Data/advanced_algorithms_weka.csv', sep = ';')
 colnames(advan_tbl)[1] <- '.'
-pander(advan_tbl)
+pander(advan_tbl, caption = "Advanced algorithms")
 ```
+  
 In above table, six algorithms are used on the dataset. with mixed results. 
 
 looking at accuracy, Random Forest, simple logistic and SMO preform equally. With naïve bayes not fall far behind. They all around the 66% mark, same as ZeroR. But they all acquire it on a different way. Random forest and simple logistic have the exact same accuracy and TP/FP rate. only a speed difference, with is not big. 
@@ -498,7 +499,7 @@ p.values <- t(unlist(res))
 cat("Proteins left = ",length(p.values))
 filtered_proteomes <- proteomes_with_healthy[,c(colnames(p.values))]
 ```
-With a p-value of 0.05 210 protein will be left, which is still many. With a small p-value of 0.01, 210 proteins are still in the dataset. 210 is enough and strict. 
+With a p-value of 0.01 210 protein will be left, which is still many. With a small p-value of 0.01, 210 proteins are still in the dataset. 210 is enough and strict. 
 
 
 As last, the Id and tumor stage are put back in place.
@@ -560,6 +561,7 @@ colnames(advanced_filtered)[1] <- '.'
 pander(advan_tbl, caption = 'original')
 pander(advanced_filtered, caption = 'filtered')
 ```
+  
 In general the accuracy is strongly improved, with the most difference in SMO. SMO preforms good with a accuracy of 81%. which means that it preforms well also in other stages than T2. looking at the spread of the TP and FP between the stages, SMO also wins relative to IBK and simple Logistic. SMO is the clear winner here. 
 
 
